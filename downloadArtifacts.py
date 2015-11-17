@@ -3,34 +3,51 @@ import urllib2
 import json
 import os
 import subprocess
+import sys
 
 
 baseUrl = 'https://index.taskcluster.net/v1/tasks'
-namespace="gecko.v2.mozilla-central.latest.firefox"
+namespace='gecko.v2.mozilla-central.latest.firefox'
 artifactQueue='https://queue.taskcluster.net/v1/task/'
 builds=['linux64-asan','linux64-asan-debug']
-artifacts=['common.tests']
+artifacts=['jsshell','common.tests']
+targetLoc='artifacts'
 
 def doPostRequest(url,values):
-	data = urllib.urlencode(values)
-	req = urllib2.Request(url, data)
-	resp = urllib2.urlopen(req)
-	if(resp.getcode()==200):
-		typ=resp.headers.getheader('content-type')
-		if typ == 'application/json; charset=utf-8':
-			return resp.read()
-	else:
-		print "Response Code:"+str(resp.getcode())
+	try:
+		data = urllib.urlencode(values)
+		req = urllib2.Request(url, data)
+		resp = urllib2.urlopen(req)
+		if(resp.getcode()==200):
+			typ=resp.headers.getheader('content-type')
+			if typ == 'application/json; charset=utf-8':
+				return resp.read()
+			else:
+				raise Exception('In Correct Response Type - Expecting application/json')
+
+		else:
+			print 'Response Code:'+str(resp.getcode())
+	except urllib2.URLError:
+		print 'No Internet Connection'
+	except Exception as e:
+		print e
 
 def doGetRequest(url):
-	req = urllib2.Request(url)
-	resp = urllib2.urlopen(req)
-	if(resp.getcode()==200):
-		typ=resp.headers.getheader('content-type')
-		if typ == 'application/json; charset=utf-8':
-			return resp.read()
-	else:
-		print "Response Code:"+str(resp.getcode())
+	try:
+		req = urllib2.Request(url)
+		resp = urllib2.urlopen(req)
+		if(resp.getcode()==200):
+			typ=resp.headers.getheader('content-type')
+			if typ == 'application/json; charset=utf-8':
+				return resp.read()
+			else:
+				raise Exception('In Correct Response Type - Expecting application/json')
+		else:
+			print 'Response Code:'+str(resp.getcode())
+	except urllib2.URLError:
+		print 'No Internet Connection'
+	except Exception as e:
+		print e
 
 
 def fetchBuildUrls(jsonResp):
@@ -40,7 +57,7 @@ def fetchBuildUrls(jsonResp):
 	buildUrls={}
 	for task in tasks:
 		for build in builds:
-			if (task['namespace']==namespace+"."+build):
+			if (task['namespace']==namespace+'.'+build):
 				taskIDList[build]=task['taskId']
 	for build in builds:
 		buildUrls[build]=artifactQueue+taskIDList[build]+'/artifacts'
@@ -48,7 +65,7 @@ def fetchBuildUrls(jsonResp):
 
 def downloadArtifacts(buildUrls):
 	for k in buildUrls.keys():
-		localLoc=os.path.abspath("artifacts/"+k)
+		localLoc=os.path.abspath(targetLoc+'/'+k)
 		if os.path.exists(localLoc):
 			import shutil
 			shutil.rmtree(localLoc)
@@ -60,9 +77,11 @@ def downloadArtifacts(buildUrls):
 			for l in  artifactsList:
 				for a in artifacts:
 					if a in l['name']:
-						remoteLoc=buildUrls[k]+"/"+l['name']
-						localLoc=localLoc+"/"+a+".zip"
+						remoteLoc=buildUrls[k]+'/'+l['name']
+						localLoc=localLoc+'/'+a+'.zip'
+						print 'Downloading Artifact ' + k + ':' + str(a)
 						if downloadUrl(localLoc,remoteLoc):
+							print 'Extracting Artifact ' + k + ':' + str(a)
 							unZip(localLoc,localLoc[:-4])
 							os.remove(localLoc)
 
@@ -72,7 +91,7 @@ def unZip(local, dest):
             env = os.environ)
 	out, err = p.communicate()
 	if p.returncode != 0:
-		print "Error in Downloading"
+		print 'Error in Downloading'
 		return False
 	return True
 
@@ -82,12 +101,12 @@ def downloadUrl(local, remote):
             env = os.environ)
 	out, err = p.communicate()
 	if p.returncode != 0:
-		print "Error in Downloading"
+		print 'Error in Downloading'
 		return False
 	return True
 
 def main():
-	url=baseUrl+"/"+namespace
+	url=baseUrl+'/'+namespace
 	values={}	
 	jsonResp = doPostRequest(url,values)
 	fetchBuildUrls(jsonResp)
